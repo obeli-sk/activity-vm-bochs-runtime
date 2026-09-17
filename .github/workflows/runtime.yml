@@ -1,0 +1,78 @@
+name: runtime
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Docker Hub tag, defaults to the commit SHA
+        required: false
+        type: string
+      push:
+        description: Push the runtime to Docker Hub
+        default: false
+        required: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_BASE: docker.io/getobelisk/activity-vm-runtime
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: DeterminateSystems/nix-installer-action@v21
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+
+      - name: Build and test
+        run: nix flake check --print-build-logs
+
+      - name: Stage runtime
+        run: |
+          nix build --print-build-logs
+          mkdir -p builds
+          cp result/activity-vm-runtime.wasm builds/
+          sha256sum builds/activity-vm-runtime.wasm | tee builds/SHA256SUMS
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: activity-vm-runtime-${{ github.sha }}
+          path: builds/
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: oras-project/setup-oras@v1
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.push) || startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Push runtime to Docker Hub
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.push) || startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="$INPUT_TAG"
+          if [[ -z "$tag" ]]; then
+            tag="${GITHUB_REF_NAME:-$GITHUB_SHA}"
+          fi
+          echo "$DOCKER_HUB_TOKEN" | oras login docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
+          cd builds
+          wasm_digest=$(cut -d ' ' -f 1 SHA256SUMS)
+          created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          printf '%s\n' \
+            "{\"created\":\"$created\",\"author\":null,\"architecture\":\"wasm\",\"os\":\"wasip1\",\"layerDigests\":[\"sha256:$wasm_digest\"],\"component\":null}" \
+            > wasm-config.json
+          oras push "${IMAGE_BASE}:${tag}" \
+            --config wasm-config.json:application/vnd.wasm.config.v0+json \
+            --annotation dev.obelisk.artifact.kind=activity-vm-runtime.v1 \
+            "activity-vm-runtime.wasm:application/wasm"
+          oras manifest fetch --descriptor "${IMAGE_BASE}:${tag}"
