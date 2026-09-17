@@ -34,6 +34,7 @@
   libxml2,
   ncurses,
   libffi,
+  wasm-tools,
 }: let
   target = "x86_64-unknown-linux-musl";
   wasiSdk = stdenv.mkDerivation {
@@ -135,7 +136,8 @@
       mkdir -p "$iso/boot/grub" "$out"
       cp ${linux}/bzImage "$iso/boot/bzImage"
       cp ${../config/grub.cfg} "$iso/boot/grub/grub.cfg"
-      grub-mkrescue -o "$out/boot.iso" "$iso"
+      grub-mkrescue --locales="" --fonts="" --themes="" \
+        -o "$out/boot.iso" "$iso"
     '';
   };
   bios = stdenv.mkDerivation {
@@ -249,13 +251,14 @@
     pname = "activity-vm-runtime";
     version = "0.1.0";
     dontUnpack = true;
-    nativeBuildInputs = [wasi-vfs];
+    nativeBuildInputs = [wasi-vfs wasm-tools];
     buildPhase = ''
       export XDG_CACHE_HOME="$TMPDIR/cache"
       mkdir -p "$XDG_CACHE_HOME"
       mkdir minpack
       cp ${pack}/boot.iso ${pack}/rootfs.bin minpack/
-      wasi-vfs pack ${snapshotted}/bochs.wasm --dir "$PWD/minpack"::/pack -o activity-vm-runtime.wasm
+      wasi-vfs pack ${snapshotted}/bochs.wasm --dir "$PWD/minpack"::/pack -o packed.wasm
+      wasm-tools strip -d '.debug_*' packed.wasm -o activity-vm-runtime.wasm
     '';
     installPhase = ''
       install -D -m 644 activity-vm-runtime.wasm "$out/activity-vm-runtime.wasm"
