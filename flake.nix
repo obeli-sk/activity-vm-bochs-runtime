@@ -9,7 +9,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     bochs = {
-      url = "github:obeli-sk/bochs-c2w/86964d7dd68711afa075dcdb267106aef40f83b6";
+      url = "github:obeli-sk/activity-vm-bochs/86964d7dd68711afa075dcdb267106aef40f83b6";
       flake = false;
     };
     linux = {
@@ -48,6 +48,8 @@
       wizerSrc = inputs.wizer;
       proxy = inputs.activity-vm-proxy.packages.${system}.default;
       grub2 = legacyPkgs.grub2;
+      kernelStdenv = legacyPkgs.gcc11Stdenv;
+      kernelNativeBuildInputs = with legacyPkgs; [bc bison flex perl openssl elfutils pkg-config];
     };
   in {
     packages.${system} = {

@@ -11,6 +11,8 @@
   wizer,
   proxy,
   pkgsStatic,
+  kernelStdenv,
+  kernelNativeBuildInputs,
   bc,
   bison,
   flex,
@@ -74,11 +76,11 @@
       install -D -m 755 target/${target}/release/activity-vm-init "$out/bin/activity-vm-init"
     '';
   };
-  linux = stdenv.mkDerivation {
+  linux = kernelStdenv.mkDerivation {
     pname = "activity-vm-linux";
     version = "6.1";
     src = linuxSrc;
-    nativeBuildInputs = [bc bison flex perl openssl elfutils pkg-config];
+    nativeBuildInputs = kernelNativeBuildInputs;
     postPatch = ''
       cp ${../config/linux_x86_config} .config
       patchShebangs scripts
