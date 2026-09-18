@@ -59,7 +59,7 @@ fn run() -> Result<(), String> {
         .args(&runtime.command[1..])
         .status()
         .map_err(|error| format!("cannot execute {:?}: {error}", runtime.command[0]))?;
-    eprintln!("activity-vm-init: activity exited with {status}; powering off");
+    eprintln!("activity-vm-init: guest launcher exited with {status}; powering off");
     command("/bin/poweroff", &["-f"])
 }
 
