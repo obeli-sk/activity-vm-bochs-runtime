@@ -55,11 +55,10 @@ fn run() -> Result<(), String> {
     if runtime.command.is_empty() {
         return Err("pack/info did not contain a command".to_owned());
     }
-    let status = Command::new(&runtime.command[0])
+    Command::new(&runtime.command[0])
         .args(&runtime.command[1..])
         .status()
         .map_err(|error| format!("cannot execute {:?}: {error}", runtime.command[0]))?;
-    eprintln!("activity-vm-init: guest launcher exited with {status}; powering off");
     command("/bin/poweroff", &["-f"])
 }
 
