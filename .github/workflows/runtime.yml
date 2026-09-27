@@ -5,22 +5,15 @@ on:
   push:
     branches:
       - main
-    tags:
-      - v*
   workflow_dispatch:
     inputs:
       tag:
-        description: Docker Hub tag, defaults to the commit SHA
-        required: false
+        description: Release tag (for example, v1.0.0)
+        required: true
         type: string
-      push:
-        description: Push the runtime to Docker Hub
-        default: false
-        required: false
-        type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   IMAGE_BASE: docker.io/getobelisk/activity-vm-runtime
@@ -32,6 +25,21 @@ jobs:
       - uses: actions/checkout@v6
       - uses: DeterminateSystems/nix-installer-action@v21
       - uses: DeterminateSystems/magic-nix-cache-action@v13
+
+      - name: Validate release tag
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo 'Run releases from main' >&2; exit 1; }
+          [[ "$TAG" == v* ]] && git check-ref-format "refs/tags/$TAG"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "Tag $TAG already exists" >&2
+            exit 1
+          else
+            status=$?
+            [[ "$status" -eq 2 ]] || exit "$status"
+          fi
 
       - name: Build and test
         run: nix flake check --print-build-logs
@@ -51,20 +59,16 @@ jobs:
           retention-days: 7
 
       - uses: oras-project/setup-oras@v1
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.push) || startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Push runtime to Docker Hub
         id: push
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.push) || startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
           DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
-          INPUT_TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag }}
         run: |
-          tag="$INPUT_TAG"
-          if [[ -z "$tag" ]]; then
-            tag="${GITHUB_REF_NAME:-$GITHUB_SHA}"
-          fi
           echo "$DOCKER_HUB_TOKEN" | oras login docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
           cd builds
           wasm_digest=$(cut -d ' ' -f 1 SHA256SUMS)
@@ -72,25 +76,21 @@ jobs:
           printf '%s\n' \
             "{\"created\":\"$created\",\"author\":null,\"architecture\":\"wasm\",\"os\":\"wasip1\",\"layerDigests\":[\"sha256:$wasm_digest\"],\"component\":null}" \
             > wasm-config.json
-          oras push "${IMAGE_BASE}:${tag}" \
+          oras push "${IMAGE_BASE}:${TAG}" \
             --config wasm-config.json:application/vnd.wasm.config.v0+json \
             --annotation dev.obelisk.artifact.kind=activity-vm-runtime.v1 \
             "activity-vm-runtime.wasm:application/wasm"
-          descriptor=$(oras manifest fetch --descriptor "${IMAGE_BASE}:${tag}")
+          descriptor=$(oras manifest fetch --descriptor "${IMAGE_BASE}:${TAG}")
           echo "$descriptor"
           manifest_digest=$(printf '%s' "$descriptor" | jq -r .digest)
           echo "reference=oci://${IMAGE_BASE}:${tag}@${manifest_digest}" >> "$GITHUB_OUTPUT"
 
-      # On a v* tag, open a PR against obelisk bumping the runtime's pinned OCI
-      # reference. Needs a PAT (RUNTIME_TO_OBELISK_PR) with push+PR rights on
-      # obeli-sk/obelisk. Only the version file changes: the activity VM runtime
-      # is fetched at runtime, not embedded, so no flake.nix outputHash bump.
       - name: Open obelisk version-bump PR
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ secrets.RUNTIME_TO_OBELISK_PR }}
           REFERENCE: ${{ steps.push.outputs.reference }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag }}
         run: |
           git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/obeli-sk/obelisk.git" obelisk-clone
           cd obelisk-clone
@@ -107,3 +107,11 @@ jobs:
           gh pr create --repo obeli-sk/obelisk --base main --head "$branch" \
             --title "chore: bump activity-vm-runtime to ${TAG}" \
             --body "$body"
+
+      - name: Create release tag
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" tag -a "$TAG" -m "Release $TAG"
+          git push origin "refs/tags/$TAG"

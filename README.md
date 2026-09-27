@@ -50,11 +50,12 @@ nix flake check --print-build-logs
 
 ## Publication
 
-The `runtime` GitHub Actions workflow builds the artifact with Nix, uploads the
-WASM and its SHA-256 digest as workflow artifacts, and can publish it to
-`docker.io/getobelisk/activity-vm-runtime`. Tagged builds publish automatically;
-manual runs publish only when `push` is selected. Docker Hub credentials are
-read from `DOCKER_HUB_USERNAME` and `DOCKER_HUB_TOKEN` repository secrets.
+The `runtime` GitHub Actions workflow builds the artifact with Nix and uploads
+the WASM and its SHA-256 digest as workflow artifacts. Run it on `main` with a
+new `v*` tag to publish to `docker.io/getobelisk/activity-vm-runtime`, open an
+Obelisk PR with the digest-pinned OCI reference, and create the release tag in
+this repository. Publication requires `DOCKER_HUB_USERNAME`,
+`DOCKER_HUB_TOKEN`, and `RUNTIME_TO_OBELISK_PR` repository secrets.
 
 ## Provenance
 
