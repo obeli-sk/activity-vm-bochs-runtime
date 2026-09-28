@@ -60,7 +60,7 @@ this repository. Publication requires `DOCKER_HUB_USERNAME`,
 ## Provenance
 
 The extraction starts from `obeli-sk/container2wasm` commit `e83f3e0` and pins
-the Bochs fork at `86964d7dd68711afa075dcdb267106aef40f83b6`. The retained c2w
+the Bochs fork at `039b8a614b197d900306921f5dabbebe387c6b35`. The retained c2w
 inputs are `config/bochs/linux_x86_config`, the Bochs build flags, WASI SDK 19,
 Binaryen 114, wasi-vfs 0.6.3, the Wizer initialization header from `04e49c9`,
 and the Wizer snapshot protocol. Snapshotting uses the current Wizer from the

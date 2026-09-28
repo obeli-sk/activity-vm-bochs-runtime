@@ -9,7 +9,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     bochs = {
-      url = "github:obeli-sk/activity-vm-bochs/86964d7dd68711afa075dcdb267106aef40f83b6";
+      url = "github:obeli-sk/activity-vm-bochs/039b8a614b197d900306921f5dabbebe387c6b35";
       flake = false;
     };
     linux = {

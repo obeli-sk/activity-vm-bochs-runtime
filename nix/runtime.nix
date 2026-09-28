@@ -142,7 +142,7 @@
   };
   bios = stdenv.mkDerivation {
     pname = "bochs-bios";
-    version = "86964d7";
+    version = "039b8a6";
     src = "${bochsSrc}/bochs";
     nativeBuildInputs = [gnumake autoconf automake libtool];
     configurePhase = ''
@@ -194,7 +194,7 @@
   };
   bochs-wasm = stdenv.mkDerivation {
     pname = "bochs-wasm";
-    version = "86964d7";
+    version = "039b8a6";
     src = "${bochsSrc}/bochs";
     nativeBuildInputs = [gnumake autoconf automake libtool python3];
     configurePhase = ''
