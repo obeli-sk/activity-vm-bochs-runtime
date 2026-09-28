@@ -78,6 +78,8 @@ fn mount_early() -> Result<(), String> {
     command("/bin/mount", &["-t", "tmpfs", "tmpfs", "/etc"])?;
     command("/bin/mount", &["-t", "tmpfs", "tmpfs", "/nix/store"])?;
     fs::write("/etc/resolv.conf", "nameserver 127.0.0.1\n").map_err(|error| error.to_string())?;
+    // The default heuristic rejects single commits near guest RAM size, such as V8's 512 MiB code range.
+    fs::write("/proc/sys/vm/overcommit_memory", "1\n").map_err(|error| error.to_string())?;
     command(
         "/bin/mount",
         &[

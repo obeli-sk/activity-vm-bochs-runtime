@@ -1,4 +1,4 @@
-megs: 128
+megs: 512
 romimage: file=/pack/BIOS-bochs-latest
 vgaromimage: file=/pack/VGABIOS-lgpl-latest
 ata0: enabled=1, ioaddr1=0x1f0, ioaddr2=0x3f0, irq=14
