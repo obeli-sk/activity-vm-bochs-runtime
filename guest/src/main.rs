@@ -1,6 +1,7 @@
 use std::{
     env, fs,
     io::{self, Read, Write},
+    os::fd::AsRawFd,
     process::{self, Command},
 };
 
@@ -25,7 +26,11 @@ fn run() -> Result<(), String> {
 
     print!("==========");
     io::stdout().flush().map_err(|error| error.to_string())?;
-    wait_for_resume()?;
+    let now = wait_for_resume()?;
+    if !now.is_empty() {
+        set_clock(&now)?;
+    }
+    reseed_crng()?;
 
     fs::create_dir_all(WASI).map_err(|error| error.to_string())?;
     command(
@@ -86,16 +91,59 @@ fn mount_early() -> Result<(), String> {
     )
 }
 
-fn wait_for_resume() -> Result<(), String> {
-    let mut acknowledgement = [0; 2];
+/// Returns the host wall clock that Bochs appends to the resume marker.
+fn wait_for_resume() -> Result<String, String> {
+    let mut line = Vec::new();
+    let mut byte = [0; 1];
     loop {
         io::stdin()
-            .read_exact(&mut acknowledgement)
+            .read_exact(&mut byte)
             .map_err(|error| format!("waiting for Wizer resume: {error}"))?;
-        if acknowledgement == *b"=\n" {
-            return Ok(());
+        if byte[0] != b'\n' {
+            line.push(byte[0]);
+        } else if let Some(now) = line.strip_prefix(b"=") {
+            return String::from_utf8(now.to_vec()).map_err(|error| error.to_string());
+        } else {
+            line.clear();
         }
     }
+}
+
+#[repr(C)]
+struct Timespec {
+    tv_sec: i64,
+    tv_nsec: i64,
+}
+
+unsafe extern "C" {
+    fn clock_settime(clock: i32, time: *const Timespec) -> i32;
+    fn ioctl(fd: i32, request: i32, ...) -> i32;
+}
+
+fn set_clock(now: &str) -> Result<(), String> {
+    const CLOCK_REALTIME: i32 = 0;
+    let (seconds, nanoseconds) = now
+        .split_once('.')
+        .filter(|(_, nanoseconds)| nanoseconds.len() == 9)
+        .ok_or_else(|| format!("invalid resume time: {now:?}"))?;
+    let time = Timespec {
+        tv_sec: seconds.parse().map_err(|_| format!("invalid resume time: {now:?}"))?,
+        tv_nsec: nanoseconds.parse().map_err(|_| format!("invalid resume time: {now:?}"))?,
+    };
+    if unsafe { clock_settime(CLOCK_REALTIME, &time) } != 0 {
+        return Err(format!("clock_settime: {}", io::Error::last_os_error()));
+    }
+    Ok(())
+}
+
+/// Every resume starts from the snapshot's CRNG state; only a reseed pulls in fresh RDRAND output.
+fn reseed_crng() -> Result<(), String> {
+    const RNDRESEEDCRNG: i32 = 0x5207;
+    let urandom = fs::File::open("/dev/urandom").map_err(|error| error.to_string())?;
+    if unsafe { ioctl(urandom.as_raw_fd(), RNDRESEEDCRNG) } != 0 {
+        return Err(format!("RNDRESEEDCRNG: {}", io::Error::last_os_error()));
+    }
+    Ok(())
 }
 
 fn bind_preopen(mapping: &Mount) -> Result<(), String> {
